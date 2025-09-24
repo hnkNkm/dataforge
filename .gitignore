@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# tauri
+src-tauri/target/
+
+# Database data directories
+database/
+
+.env
+*.env.local

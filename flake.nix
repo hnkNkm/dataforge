@@ -34,6 +34,11 @@
             nodejs_22
             pnpm
 
+            # Database
+            postgresql_16
+            mysql80
+            sqlite
+
             # Tauri dependencies for Linux
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
             webkitgtk_4_1
@@ -55,11 +60,26 @@
             echo "Node.js: $(node --version)"
             echo "pnpm: $(pnpm --version)"
             echo "Rust: $(rustc --version)"
+            echo "PostgreSQL: $(postgres --version)"
+            echo "MySQL: $(mysql --version)"
             echo ""
             echo "Available commands:"
             echo "  pnpm install         - Install dependencies"
             echo "  pnpm tauri dev       - Start development server"
             echo "  pnpm tauri build     - Build for production"
+            echo ""
+            echo "Database commands:"
+            echo "  PostgreSQL:"
+            echo "    pg_ctl init -D ./database/postgres     - Initialize PostgreSQL database"
+            echo "    pg_ctl start -D ./database/postgres    - Start PostgreSQL server"
+            echo "    pg_ctl stop -D ./database/postgres     - Stop PostgreSQL server"
+            echo "    psql -d postgres                        - Connect to PostgreSQL"
+            echo "  MySQL:"
+            echo "    mysqld --initialize-insecure --datadir=./database/mysql  - Initialize MySQL"
+            echo "    mysqld --datadir=./database/mysql &                      - Start MySQL server"
+            echo "    mysql -u root                                             - Connect to MySQL"
+            echo "  SQLite:"
+            echo "    sqlite3 ./database/sqlite/dataforge.db - Create/Connect to SQLite database"
           '';
 
           # Environment variables for Tauri
