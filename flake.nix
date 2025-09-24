@@ -34,6 +34,9 @@
             nodejs_22
             pnpm
 
+            # Database
+            postgresql_16
+
             # Tauri dependencies for Linux
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
             webkitgtk_4_1
@@ -55,11 +58,18 @@
             echo "Node.js: $(node --version)"
             echo "pnpm: $(pnpm --version)"
             echo "Rust: $(rustc --version)"
+            echo "PostgreSQL: $(postgres --version)"
             echo ""
             echo "Available commands:"
             echo "  pnpm install         - Install dependencies"
             echo "  pnpm tauri dev       - Start development server"
             echo "  pnpm tauri build     - Build for production"
+            echo ""
+            echo "Database commands:"
+            echo "  pg_ctl init -D ./pgdata     - Initialize PostgreSQL database"
+            echo "  pg_ctl start -D ./pgdata    - Start PostgreSQL server"
+            echo "  pg_ctl stop -D ./pgdata     - Stop PostgreSQL server"
+            echo "  psql -d postgres            - Connect to PostgreSQL"
           '';
 
           # Environment variables for Tauri
