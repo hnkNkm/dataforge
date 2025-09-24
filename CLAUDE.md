@@ -71,3 +71,48 @@ pnpm preview  # Preview built app
 - The project uses Nix Flakes for reproducible builds
 - Vite is configured to ignore `src-tauri` for file watching
 - Frontend and backend run concurrently during development
+
+## ブランチ戦略
+
+### 基本ルール
+- `main`: 本番環境相当の安定版
+- `feature/*`: 機能開発ブランチ（Sprint単位）
+- `feature/*/sub-*`: 作業単位の細分化ブランチ
+
+### 作業フロー
+1. Sprint開始時に`feature/`ブランチを作成
+2. 各作業単位で`sub-`ブランチを作成
+3. 小さな単位で実装・テスト・コミット
+4. `sub-`ブランチを`feature`ブランチにマージ
+5. Sprint完了後、`feature`ブランチを`main`にマージ
+
+### コミットルール
+- 作業単位ごとに意味のあるコミット
+- プレフィックス使用：
+  - `feat:` 新機能
+  - `fix:` バグ修正
+  - `docs:` ドキュメント
+  - `refactor:` リファクタリング
+  - `test:` テスト
+  - `chore:` その他の変更
+- 日本語コミットメッセージOK
+
+### 例
+```bash
+# Sprint用のfeatureブランチ作成
+git checkout -b feature/postgres-connection
+
+# 作業単位のsub-ブランチ作成
+git checkout -b feature/postgres-connection/sub-rust-deps
+
+# 実装・コミット
+git add .
+git commit -m "feat: add database dependencies to Cargo.toml"
+
+# featureブランチにマージ
+git checkout feature/postgres-connection
+git merge --no-ff feature/postgres-connection/sub-rust-deps
+
+# 完了したらsub-ブランチを削除
+git branch -d feature/postgres-connection/sub-rust-deps
+```
