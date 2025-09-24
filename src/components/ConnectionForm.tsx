@@ -48,12 +48,13 @@ export function ConnectionForm() {
         ...formData,
         database_type: value as DatabaseType,
         port: defaultPorts[value as DatabaseType],
-        // Clear host and credentials for SQLite
-        ...(value === "sqlite" && {
+        // Set appropriate defaults for SQLite
+        ...(value === "sqlite" ? {
           host: "",
+          database: "database/sqlite/dataforge.db",
           username: "",
           password: "",
-        }),
+        } : {}),
       });
     } else {
       setFormData({
@@ -179,7 +180,7 @@ export function ConnectionForm() {
             htmlFor="database"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >
-            データベース名
+            {formData.database_type === "sqlite" ? "データベースファイルパス" : "データベース名"}
           </label>
           <input
             id="database"
@@ -187,6 +188,13 @@ export function ConnectionForm() {
             type="text"
             value={formData.database}
             onChange={handleInputChange}
+            placeholder={
+              formData.database_type === "sqlite"
+                ? "例: database/sqlite/myapp.db"
+                : formData.database_type === "mysql"
+                ? "例: dataforge_dev"
+                : "例: dataforge_dev"
+            }
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
           />
         </div>

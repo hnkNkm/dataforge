@@ -6,8 +6,7 @@ use crate::error::AppError;
 
 pub mod postgres;
 pub mod mysql;
-// TODO: Add when implementing
-// pub mod sqlite;
+pub mod sqlite;
 
 /// Supported database types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,9 +191,7 @@ pub fn create_adapter(database_type: DatabaseType) -> Result<Box<dyn DatabaseAda
     match database_type {
         DatabaseType::PostgreSQL => Ok(Box::new(postgres::PostgresAdapter::new())),
         DatabaseType::MySQL => Ok(Box::new(mysql::MySqlAdapter::new())),
-        DatabaseType::SQLite => {
-            Err(AppError::NotFound("SQLite adapter not yet implemented".to_string()))
-        }
+        DatabaseType::SQLite => Ok(Box::new(sqlite::SqliteAdapter::new())),
     }
 }
 

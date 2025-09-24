@@ -26,11 +26,8 @@ dist-ssr
 # tauri
 src-tauri/target/
 
-# PostgreSQL
-pgdata/
-
-# MySQL
-mysqldata/
+# Database data directories
+database/
 
 .env
 *.env.local
