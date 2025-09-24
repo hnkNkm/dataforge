@@ -1,11 +1,15 @@
-use crate::database::{ConnectionParams, DatabaseAdapter, DatabaseType, create_adapter};
-use crate::error::AppError;
+use crate::database::adapter::{ConnectionParams, DatabaseAdapter, DatabaseType, create_adapter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use once_cell::sync::Lazy;
 
-// Global adapter storage (temporary - should use proper state management)
-static mut ADAPTER: Option<Arc<Mutex<Box<dyn DatabaseAdapter>>>> = None;
+pub mod profile;
+
+// Global adapter storage using Lazy static
+pub static ADAPTER_STATE: Lazy<Arc<Mutex<Option<Box<dyn DatabaseAdapter + Send + Sync>>>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(None))
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectRequest {
@@ -47,23 +51,24 @@ pub async fn connect_database(request: ConnectRequest) -> Result<String, String>
     adapter.connect(&params).await
         .map_err(|e| format!("Connection failed: {}", e))?;
 
-    // Store adapter globally (temporary solution)
-    unsafe {
-        ADAPTER = Some(Arc::new(Mutex::new(adapter)));
-    }
+    // Store adapter in global state
+    let mut adapter_state = ADAPTER_STATE.lock().await;
+    *adapter_state = Some(adapter);
 
     Ok("Connected successfully".to_string())
 }
 
 #[tauri::command]
 pub async fn disconnect_database() -> Result<String, String> {
-    unsafe {
-        if let Some(adapter) = &ADAPTER {
-            let mut adapter = adapter.lock().await;
-            adapter.disconnect().await
-                .map_err(|e| format!("Disconnect failed: {}", e))?;
-        }
-        ADAPTER = None;
+    // Take the adapter out of the mutex
+    let adapter_option = {
+        let mut adapter_state = ADAPTER_STATE.lock().await;
+        adapter_state.take()
+    };
+
+    if let Some(mut adapter) = adapter_option {
+        adapter.disconnect().await
+            .map_err(|e| format!("Disconnect failed: {}", e))?;
     }
 
     Ok("Disconnected successfully".to_string())
@@ -71,12 +76,11 @@ pub async fn disconnect_database() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn test_database_connection_adapter() -> Result<bool, String> {
-    unsafe {
-        if let Some(adapter) = &ADAPTER {
-            let adapter = adapter.lock().await;
-            return adapter.test_connection().await
-                .map_err(|e| format!("Test failed: {}", e));
-        }
+    let adapter_state = ADAPTER_STATE.lock().await;
+
+    if let Some(adapter) = adapter_state.as_ref() {
+        return adapter.test_connection().await
+            .map_err(|e| format!("Test failed: {}", e));
     }
 
     Err("No active connection".to_string())
@@ -84,16 +88,15 @@ pub async fn test_database_connection_adapter() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn execute_query(query: String) -> Result<serde_json::Value, String> {
-    unsafe {
-        if let Some(adapter) = &ADAPTER {
-            let adapter = adapter.lock().await;
-            let result = adapter.execute_query(&query).await
-                .map_err(|e| format!("Query failed: {}", e))?;
+    let adapter_state = ADAPTER_STATE.lock().await;
 
-            // Convert to JSON
-            return serde_json::to_value(result)
-                .map_err(|e| format!("Serialization failed: {}", e));
-        }
+    if let Some(adapter) = adapter_state.as_ref() {
+        let result = adapter.execute_query(&query).await
+            .map_err(|e| format!("Query failed: {}", e))?;
+
+        // Convert to JSON
+        return serde_json::to_value(result)
+            .map_err(|e| format!("Serialization failed: {}", e));
     }
 
     Err("No active connection".to_string())
@@ -101,16 +104,15 @@ pub async fn execute_query(query: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn get_database_metadata() -> Result<serde_json::Value, String> {
-    unsafe {
-        if let Some(adapter) = &ADAPTER {
-            let adapter = adapter.lock().await;
-            let metadata = adapter.get_metadata().await
-                .map_err(|e| format!("Failed to get metadata: {}", e))?;
+    let adapter_state = ADAPTER_STATE.lock().await;
 
-            // Convert to JSON
-            return serde_json::to_value(metadata)
-                .map_err(|e| format!("Serialization failed: {}", e));
-        }
+    if let Some(adapter) = adapter_state.as_ref() {
+        let metadata = adapter.get_metadata().await
+            .map_err(|e| format!("Failed to get metadata: {}", e))?;
+
+        // Convert to JSON
+        return serde_json::to_value(metadata)
+            .map_err(|e| format!("Serialization failed: {}", e));
     }
 
     Err("No active connection".to_string())
@@ -118,16 +120,15 @@ pub async fn get_database_metadata() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub async fn list_database_tables() -> Result<serde_json::Value, String> {
-    unsafe {
-        if let Some(adapter) = &ADAPTER {
-            let adapter = adapter.lock().await;
-            let tables = adapter.list_tables().await
-                .map_err(|e| format!("Failed to list tables: {}", e))?;
+    let adapter_state = ADAPTER_STATE.lock().await;
 
-            // Convert to JSON
-            return serde_json::to_value(tables)
-                .map_err(|e| format!("Serialization failed: {}", e));
-        }
+    if let Some(adapter) = adapter_state.as_ref() {
+        let tables = adapter.list_tables().await
+            .map_err(|e| format!("Failed to list tables: {}", e))?;
+
+        // Convert to JSON
+        return serde_json::to_value(tables)
+            .map_err(|e| format!("Serialization failed: {}", e));
     }
 
     Err("No active connection".to_string())

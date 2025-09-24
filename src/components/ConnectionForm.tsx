@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Database, CheckCircle, XCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { Database, CheckCircle, XCircle, Loader2, Eye, EyeOff, Save } from "lucide-react";
+import { useProfileStore } from "../stores/profileStore";
+import { ConnectionProfile } from "../types/profile";
 
 type DatabaseType = "postgresql" | "mysql" | "sqlite";
 
@@ -11,10 +13,19 @@ interface ConnectionFormData {
   database: string;
   username: string;
   password: string;
+  name: string;
 }
 
-export function ConnectionForm() {
+interface ConnectionFormProps {
+  editingProfile?: ConnectionProfile | null;
+  onSaveSuccess?: () => void;
+  isEditMode?: boolean;
+}
+
+export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: ConnectionFormProps) {
+  const { createProfile, updateProfile } = useProfileStore();
   const [formData, setFormData] = useState<ConnectionFormData>({
+    name: "",
     database_type: "postgresql",
     host: "localhost",
     port: "5433",
@@ -22,6 +33,20 @@ export function ConnectionForm() {
     username: "dataforge",
     password: "dataforge_dev",
   });
+
+  useEffect(() => {
+    if (editingProfile) {
+      setFormData({
+        name: editingProfile.name,
+        database_type: editingProfile.database_type as DatabaseType,
+        host: editingProfile.host || "localhost",
+        port: editingProfile.port?.toString() || "",
+        database: editingProfile.database,
+        username: editingProfile.username || "",
+        password: "", // Password is not returned for security
+      });
+    }
+  }, [editingProfile]);
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -61,6 +86,48 @@ export function ConnectionForm() {
         ...formData,
         [name]: value,
       });
+    }
+  };
+
+  const saveProfile = async () => {
+    setIsConnecting(true);
+    setConnectionStatus({ status: "idle", message: "" });
+
+    try {
+      const request = {
+        name: formData.name,
+        database_type: formData.database_type,
+        host: formData.host || null,
+        port: formData.port ? parseInt(formData.port) : null,
+        database: formData.database,
+        username: formData.username || null,
+        password: formData.password || null,
+      };
+
+      if (isEditMode && editingProfile) {
+        await updateProfile({ id: editingProfile.id, ...request });
+        setConnectionStatus({
+          status: "success",
+          message: "プロファイルを更新しました",
+        });
+      } else {
+        await createProfile(request);
+        setConnectionStatus({
+          status: "success",
+          message: "プロファイルを保存しました",
+        });
+      }
+
+      if (onSaveSuccess) {
+        setTimeout(onSaveSuccess, 1000);
+      }
+    } catch (error) {
+      setConnectionStatus({
+        status: "error",
+        message: String(error),
+      });
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -110,11 +177,30 @@ export function ConnectionForm() {
       <div className="flex items-center gap-2 mb-6">
         <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
         <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-          PostgreSQL接続
+          {isEditMode ? "接続プロファイルを編集" : "新規接続プロファイル"}
         </h2>
       </div>
 
       <div className="space-y-4">
+        <div>
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            プロファイル名
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            value={formData.name}
+            onChange={handleInputChange}
+            placeholder="例: 本番環境DB"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+            required
+          />
+        </div>
+
         <div>
           <label
             htmlFor="database_type"
@@ -251,21 +337,38 @@ export function ConnectionForm() {
           </div>
         )}
 
-        <div className="flex justify-end mt-6">
+        <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={testConnection}
             disabled={isConnecting}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isConnecting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                接続中...
+                テスト中...
               </>
             ) : (
               <>
                 <Database className="w-4 h-4" />
                 接続テスト
+              </>
+            )}
+          </button>
+          <button
+            onClick={saveProfile}
+            disabled={isConnecting || !formData.name || !formData.database}
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isConnecting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                {isEditMode ? "更新" : "保存"}
               </>
             )}
           </button>

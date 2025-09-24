@@ -2,6 +2,7 @@ mod commands;
 mod database;
 mod error;
 mod logger;
+mod profile;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -62,6 +63,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(commands::profile::ProfileManagerState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             test_database_connection,
@@ -71,8 +73,14 @@ pub fn run() {
             commands::execute_query,
             commands::get_database_metadata,
             commands::list_database_tables,
+            commands::profile::create_profile,
+            commands::profile::list_profiles,
+            commands::profile::get_profile,
+            commands::profile::update_profile,
+            commands::profile::delete_profile,
+            commands::profile::connect_with_profile,
         ])
-        .setup(|app| {
+        .setup(|_app| {
             log_info!("main", "Application setup complete");
             Ok(())
         })

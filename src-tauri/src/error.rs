@@ -28,6 +28,12 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    #[error("Storage error: {0}")]
+    Storage(String),
+
+    #[error("Encryption error: {0}")]
+    Encryption(String),
+
     #[error("Not found: {0}")]
     NotFound(String),
 
@@ -63,6 +69,8 @@ impl From<&AppError> for ErrorResponse {
             AppError::Network(_) => "network",
             AppError::Auth(_) => "auth",
             AppError::Validation(_) => "validation",
+            AppError::Storage(_) => "storage",
+            AppError::Encryption(_) => "encryption",
             AppError::NotFound(_) => "not_found",
             AppError::PermissionDenied(_) => "permission_denied",
             AppError::Cancelled => "cancelled",
