@@ -1,3 +1,4 @@
+mod commands;
 mod database;
 mod error;
 mod logger;
@@ -61,7 +62,16 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, test_database_connection])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            test_database_connection,
+            commands::connect_database,
+            commands::disconnect_database,
+            commands::test_database_connection_adapter,
+            commands::execute_query,
+            commands::get_database_metadata,
+            commands::list_database_tables,
+        ])
         .setup(|app| {
             log_info!("main", "Application setup complete");
             Ok(())
