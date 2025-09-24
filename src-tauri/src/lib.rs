@@ -1,4 +1,6 @@
 mod database;
+mod error;
+mod logger;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -32,9 +34,38 @@ async fn test_database_connection() -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logger
+    let log_level = if cfg!(debug_assertions) {
+        logger::LogLevel::Debug
+    } else {
+        logger::LogLevel::Info
+    };
+
+    // Get app data directory for log file
+    let log_file = if let Ok(home_dir) = std::env::var("HOME") {
+        let log_dir = std::path::PathBuf::from(home_dir)
+            .join(".dataforge")
+            .join("logs");
+        std::fs::create_dir_all(&log_dir).ok();
+        Some(log_dir.join("dataforge.log"))
+    } else {
+        None
+    };
+
+    // Initialize the logger
+    if let Err(e) = logger::init_logger(log_level, log_file) {
+        eprintln!("Failed to initialize logger: {}", e);
+    }
+
+    log_info!("main", "Starting DataForge application");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet, test_database_connection])
+        .setup(|app| {
+            log_info!("main", "Application setup complete");
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
