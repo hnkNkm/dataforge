@@ -36,6 +36,7 @@
 
             # Database
             postgresql_16
+            mysql80
 
             # Tauri dependencies for Linux
           ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
@@ -59,6 +60,7 @@
             echo "pnpm: $(pnpm --version)"
             echo "Rust: $(rustc --version)"
             echo "PostgreSQL: $(postgres --version)"
+            echo "MySQL: $(mysql --version)"
             echo ""
             echo "Available commands:"
             echo "  pnpm install         - Install dependencies"
@@ -66,10 +68,15 @@
             echo "  pnpm tauri build     - Build for production"
             echo ""
             echo "Database commands:"
-            echo "  pg_ctl init -D ./pgdata     - Initialize PostgreSQL database"
-            echo "  pg_ctl start -D ./pgdata    - Start PostgreSQL server"
-            echo "  pg_ctl stop -D ./pgdata     - Stop PostgreSQL server"
-            echo "  psql -d postgres            - Connect to PostgreSQL"
+            echo "  PostgreSQL:"
+            echo "    pg_ctl init -D ./pgdata     - Initialize PostgreSQL database"
+            echo "    pg_ctl start -D ./pgdata    - Start PostgreSQL server"
+            echo "    pg_ctl stop -D ./pgdata     - Stop PostgreSQL server"
+            echo "    psql -d postgres            - Connect to PostgreSQL"
+            echo "  MySQL:"
+            echo "    mysqld --initialize-insecure --datadir=./mysqldata  - Initialize MySQL"
+            echo "    mysqld --datadir=./mysqldata &                      - Start MySQL server"
+            echo "    mysql -u root                                        - Connect to MySQL"
           '';
 
           # Environment variables for Tauri

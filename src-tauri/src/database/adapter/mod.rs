@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use crate::error::AppError;
 
 pub mod postgres;
-// TODO: Add these when implementing
-// pub mod mysql;
+pub mod mysql;
+// TODO: Add when implementing
 // pub mod sqlite;
 
 /// Supported database types
@@ -191,9 +191,7 @@ pub trait DatabaseAdapter: Send + Sync {
 pub fn create_adapter(database_type: DatabaseType) -> Result<Box<dyn DatabaseAdapter>, AppError> {
     match database_type {
         DatabaseType::PostgreSQL => Ok(Box::new(postgres::PostgresAdapter::new())),
-        DatabaseType::MySQL => {
-            Err(AppError::NotFound("MySQL adapter not yet implemented".to_string()))
-        }
+        DatabaseType::MySQL => Ok(Box::new(mysql::MySqlAdapter::new())),
         DatabaseType::SQLite => {
             Err(AppError::NotFound("SQLite adapter not yet implemented".to_string()))
         }

@@ -28,5 +28,9 @@ src-tauri/target/
 
 # PostgreSQL
 pgdata/
+
+# MySQL
+mysqldata/
+
 .env
 *.env.local
