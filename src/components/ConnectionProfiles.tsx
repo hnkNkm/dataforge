@@ -11,7 +11,8 @@ import {
   Clock,
   Server,
   HardDrive,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 
 const getDatabaseIcon = (type: string) => {
@@ -26,6 +27,50 @@ const getDatabaseIcon = (type: string) => {
       return <Database className="w-5 h-5 text-gray-500" />;
   }
 };
+
+// 削除確認ダイアログコンポーネント
+interface DeleteConfirmDialogProps {
+  isOpen: boolean;
+  profileName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteConfirmDialog({ isOpen, profileName, onConfirm, onCancel }: DeleteConfirmDialogProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+        <div className="flex items-start gap-3 mb-4">
+          <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              プロファイルの削除
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              プロファイル「{profileName}」を削除しますか？この操作は取り消せません。
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
+          >
+            削除
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface ProfileCardProps {
   profile: ConnectionProfile;
@@ -49,18 +94,27 @@ function ProfileCard({
   connectingProfileId
 }: ProfileCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const handleDelete = async () => {
-    if (window.confirm(`プロファイル "${profile.name}" を削除しますか？`)) {
-      setIsDeleting(true);
-      try {
-        await onDelete(profile.id);
-      } catch (error) {
-        console.error('Failed to delete profile:', error);
-      } finally {
-        setIsDeleting(false);
-      }
+  const handleDelete = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setShowDeleteDialog(false);
+    setIsDeleting(true);
+    try {
+      await onDelete(profile.id);
+    } catch (error) {
+      console.error('Failed to delete profile:', error);
+      alert(`プロファイルの削除に失敗しました: ${error}`);
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
   };
 
   return (
@@ -152,7 +206,8 @@ function ProfileCard({
         <button
           onClick={handleDelete}
           disabled={isDeleting || isConnected}
-          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors disabled:opacity-50"
+          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title={isConnected ? "接続中のプロファイルは削除できません" : "プロファイルを削除"}
         >
           {isDeleting ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -161,6 +216,14 @@ function ProfileCard({
           )}
         </button>
       </div>
+
+      {/* 削除確認ダイアログ */}
+      <DeleteConfirmDialog
+        isOpen={showDeleteDialog}
+        profileName={profile.name}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   );
 }
@@ -246,7 +309,7 @@ export function ConnectionProfiles({ onCreateNew, onEditProfile }: ConnectionPro
               onConnect={handleConnect}
               onCancelConnection={handleCancelConnection}
               onEdit={onEditProfile}
-              onDelete={() => deleteProfile(profile.id)}
+              onDelete={deleteProfile}
               isConnected={currentProfile?.id === profile.id}
               isConnecting={isConnecting}
               connectingProfileId={connectingProfileId}
