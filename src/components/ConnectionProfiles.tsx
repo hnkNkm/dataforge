@@ -231,9 +231,10 @@ function ProfileCard({
 interface ConnectionProfilesProps {
   onCreateNew: () => void;
   onEditProfile: (profile: ConnectionProfile) => void;
+  onConnectSuccess?: () => void;
 }
 
-export function ConnectionProfiles({ onCreateNew, onEditProfile }: ConnectionProfilesProps) {
+export function ConnectionProfiles({ onCreateNew, onEditProfile, onConnectSuccess }: ConnectionProfilesProps) {
   const { profiles, isLoading, loadProfiles, deleteProfile } = useProfileStore();
   const { connectWithProfile, currentProfile, isConnecting, cancelConnection } = useConnectionStore();
   const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
@@ -246,6 +247,9 @@ export function ConnectionProfiles({ onCreateNew, onEditProfile }: ConnectionPro
     setConnectingProfileId(profileId);
     try {
       await connectWithProfile(profileId);
+      if (onConnectSuccess) {
+        onConnectSuccess();
+      }
     } catch (error) {
       console.error('Failed to connect:', error);
       alert(`接続に失敗しました: ${error}`);

@@ -4,6 +4,7 @@ import type { ConnectionProfile, ConnectionState } from '../types/profile';
 
 interface ConnectionStoreState extends ConnectionState {
   isConnecting: boolean;
+  currentConnection?: ConnectionProfile;
   // Actions
   connectWithProfile: (profileId: string) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -34,6 +35,7 @@ export const useConnectionStore = create<ConnectionStoreState>((set) => ({
         isConnected: true,
         isConnecting: false,
         currentProfile: profile,
+        currentConnection: profile,
         connectionMessage: message
       });
     } catch (error) {
