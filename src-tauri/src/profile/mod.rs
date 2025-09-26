@@ -86,10 +86,10 @@ impl ProfileManager {
     }
 
     /// Create and save a new profile
-    pub async fn create_profile(&self, mut profile: ConnectionProfile, password: Option<String>) -> Result<ConnectionProfile, AppError> {
+    pub async fn create_profile(&self, profile: ConnectionProfile, password: Option<String>) -> Result<ConnectionProfile, AppError> {
         // Save password to keyring if provided
-        if let Some(pwd) = password {
-            self.storage.save_password(&profile.id, &pwd)?;
+        if let Some(pwd) = password.as_ref() {
+            self.storage.save_password(&profile.id, pwd)?;
         }
 
         // Save profile to storage
@@ -113,8 +113,8 @@ impl ProfileManager {
         profile.updated_at = Utc::now();
 
         // Update password if provided
-        if let Some(pwd) = password {
-            self.storage.save_password(&profile.id, &pwd)?;
+        if let Some(pwd) = password.as_ref() {
+            self.storage.save_password(&profile.id, pwd)?;
         }
 
         // Update profile in storage
