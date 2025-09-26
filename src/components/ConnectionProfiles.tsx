@@ -30,17 +30,23 @@ const getDatabaseIcon = (type: string) => {
 interface ProfileCardProps {
   profile: ConnectionProfile;
   onConnect: (profileId: string) => void;
+  onCancelConnection: () => void;
   onEdit: (profile: ConnectionProfile) => void;
-  onDelete: (profileId: string) => void;
+  onDelete: (profileId: string) => Promise<void>;
   isConnected: boolean;
+  isConnecting: boolean;
+  connectingProfileId: string | null;
 }
 
 function ProfileCard({
   profile,
   onConnect,
+  onCancelConnection,
   onEdit,
   onDelete,
-  isConnected
+  isConnected,
+  isConnecting,
+  connectingProfileId
 }: ProfileCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -110,21 +116,31 @@ function ProfileCard({
       )}
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => onConnect(profile.id)}
-          disabled={isConnected}
-          className={`
-            flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium text-sm
-            ${isConnected
-              ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }
-            transition-colors
-          `}
-        >
-          <Play className="w-4 h-4" />
-          接続
-        </button>
+        {isConnecting && connectingProfileId === profile.id ? (
+          <button
+            onClick={onCancelConnection}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium text-sm bg-red-600 hover:bg-red-700 text-white transition-colors"
+          >
+            <Loader2 className="w-4 h-4 animate-spin" />
+            接続中... (キャンセル)
+          </button>
+        ) : (
+          <button
+            onClick={() => onConnect(profile.id)}
+            disabled={isConnected || (isConnecting && connectingProfileId !== profile.id)}
+            className={`
+              flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium text-sm
+              ${isConnected || (isConnecting && connectingProfileId !== profile.id)
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }
+              transition-colors
+            `}
+          >
+            <Play className="w-4 h-4" />
+            接続
+          </button>
+        )}
 
         <button
           onClick={() => onEdit(profile)}
@@ -156,22 +172,31 @@ interface ConnectionProfilesProps {
 
 export function ConnectionProfiles({ onCreateNew, onEditProfile }: ConnectionProfilesProps) {
   const { profiles, isLoading, loadProfiles, deleteProfile } = useProfileStore();
-  const { connectWithProfile, currentProfile } = useConnectionStore();
-  const [isConnecting, setIsConnecting] = useState(false);
+  const { connectWithProfile, currentProfile, isConnecting, cancelConnection } = useConnectionStore();
+  const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
 
   const handleConnect = async (profileId: string) => {
-    setIsConnecting(true);
+    setConnectingProfileId(profileId);
     try {
       await connectWithProfile(profileId);
     } catch (error) {
       console.error('Failed to connect:', error);
       alert(`接続に失敗しました: ${error}`);
     } finally {
-      setIsConnecting(false);
+      setConnectingProfileId(null);
+    }
+  };
+
+  const handleCancelConnection = async () => {
+    try {
+      await cancelConnection();
+      setConnectingProfileId(null);
+    } catch (error) {
+      console.error('Failed to cancel connection:', error);
     }
   };
 
@@ -219,9 +244,12 @@ export function ConnectionProfiles({ onCreateNew, onEditProfile }: ConnectionPro
               key={profile.id}
               profile={profile}
               onConnect={handleConnect}
+              onCancelConnection={handleCancelConnection}
               onEdit={onEditProfile}
-              onDelete={deleteProfile}
+              onDelete={() => deleteProfile(profile.id)}
               isConnected={currentProfile?.id === profile.id}
+              isConnecting={isConnecting}
+              connectingProfileId={connectingProfileId}
             />
           ))}
         </div>

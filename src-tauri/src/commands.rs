@@ -2,12 +2,18 @@ use crate::database::adapter::{ConnectionParams, DatabaseAdapter, DatabaseType, 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 use once_cell::sync::Lazy;
 
 pub mod profile;
 
 // Global adapter storage using Lazy static
 pub static ADAPTER_STATE: Lazy<Arc<Mutex<Option<Box<dyn DatabaseAdapter + Send + Sync>>>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(None))
+});
+
+// Global connection cancellation token
+pub static CONNECTION_CANCEL_TOKEN: Lazy<Arc<Mutex<Option<CancellationToken>>>> = Lazy::new(|| {
     Arc::new(Mutex::new(None))
 });
 
@@ -43,13 +49,38 @@ pub async fn connect_database(request: ConnectRequest) -> Result<String, String>
         return Err(format!("Validation error: {}", e));
     }
 
+    // Create a new cancellation token
+    let cancel_token = CancellationToken::new();
+    let cancel_token_clone = cancel_token.clone();
+
+    // Store the cancellation token
+    {
+        let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+        *token_state = Some(cancel_token_clone);
+    }
+
     // Create adapter based on database type
     let mut adapter = create_adapter(params.database_type)
         .map_err(|e| format!("Failed to create adapter: {}", e))?;
 
-    // Connect to database
-    adapter.connect(&params).await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+    // Connect to database with cancellation support
+    let connect_result = tokio::select! {
+        result = adapter.connect(&params) => result,
+        _ = cancel_token.cancelled() => {
+            // Clear the cancellation token
+            let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+            *token_state = None;
+            return Err("Connection cancelled by user".to_string());
+        }
+    };
+
+    // Clear the cancellation token
+    {
+        let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+        *token_state = None;
+    }
+
+    connect_result.map_err(|e| format!("Connection failed: {}", e))?;
 
     // Store adapter in global state
     let mut adapter_state = ADAPTER_STATE.lock().await;
@@ -132,4 +163,16 @@ pub async fn list_database_tables() -> Result<serde_json::Value, String> {
     }
 
     Err("No active connection".to_string())
+}
+
+#[tauri::command]
+pub async fn cancel_connection() -> Result<String, String> {
+    let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+
+    if let Some(token) = token_state.take() {
+        token.cancel();
+        Ok("Connection cancellation requested".to_string())
+    } else {
+        Err("No active connection to cancel".to_string())
+    }
 }

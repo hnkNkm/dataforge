@@ -188,7 +188,8 @@ pub async fn connect_with_profile(
     state: State<'_, ProfileManagerState>,
 ) -> Result<String, String> {
     use crate::database::adapter::create_adapter;
-    use crate::commands::ADAPTER_STATE;
+    use crate::commands::{ADAPTER_STATE, CONNECTION_CANCEL_TOKEN};
+    use tokio_util::sync::CancellationToken;
 
     let mut manager_guard = state.0.lock().await;
 
@@ -208,9 +209,36 @@ pub async fn connect_with_profile(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Create adapter and connect
+    // Create a new cancellation token
+    let cancel_token = CancellationToken::new();
+    let cancel_token_clone = cancel_token.clone();
+
+    // Store the cancellation token
+    {
+        let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+        *token_state = Some(cancel_token_clone);
+    }
+
+    // Create adapter and connect with cancellation support
     let mut adapter = create_adapter(params.database_type).map_err(|e| e.to_string())?;
-    adapter.connect(&params).await.map_err(|e| e.to_string())?;
+
+    let connect_result = tokio::select! {
+        result = adapter.connect(&params) => result,
+        _ = cancel_token.cancelled() => {
+            // Clear the cancellation token
+            let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+            *token_state = None;
+            return Err("Connection cancelled by user".to_string());
+        }
+    };
+
+    // Clear the cancellation token
+    {
+        let mut token_state = CONNECTION_CANCEL_TOKEN.lock().await;
+        *token_state = None;
+    }
+
+    connect_result.map_err(|e| e.to_string())?;
 
     // Store the adapter in global state
     let mut adapter_state = ADAPTER_STATE.lock().await;

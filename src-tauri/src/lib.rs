@@ -73,6 +73,7 @@ pub fn run() {
             commands::execute_query,
             commands::get_database_metadata,
             commands::list_database_tables,
+            commands::cancel_connection,
             commands::profile::create_profile,
             commands::profile::list_profiles,
             commands::profile::get_profile,

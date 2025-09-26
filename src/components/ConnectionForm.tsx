@@ -14,6 +14,7 @@ interface ConnectionFormData {
   username: string;
   password: string;
   name: string;
+  connection_timeout?: number;
 }
 
 interface ConnectionFormProps {
@@ -32,6 +33,7 @@ export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: Co
     database: "dataforge_dev",
     username: "dataforge",
     password: "dataforge_dev",
+    connection_timeout: 5,
   });
 
   useEffect(() => {
@@ -97,11 +99,12 @@ export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: Co
       const request = {
         name: formData.name,
         database_type: formData.database_type,
-        host: formData.host || null,
-        port: formData.port ? parseInt(formData.port) : null,
+        host: formData.host || undefined,
+        port: formData.port ? parseInt(formData.port) : undefined,
         database: formData.database,
-        username: formData.username || null,
-        password: formData.password || null,
+        username: formData.username || undefined,
+        password: formData.password || undefined,
+        connection_timeout: formData.connection_timeout,
       };
 
       if (isEditMode && editingProfile) {
@@ -221,7 +224,7 @@ export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: Co
           </select>
         </div>
 
-        {formData.database_type !== "sqlite" && (
+        {(formData.database_type === "postgresql" || formData.database_type === "mysql") && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
@@ -285,7 +288,7 @@ export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: Co
           />
         </div>
 
-        {formData.database_type !== "sqlite" && (
+        {(formData.database_type === "postgresql" || formData.database_type === "mysql") && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
@@ -333,6 +336,28 @@ export function ConnectionForm({ editingProfile, onSaveSuccess, isEditMode }: Co
                   )}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="connection_timeout"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                接続タイムアウト（秒）
+              </label>
+              <select
+                id="connection_timeout"
+                name="connection_timeout"
+                value={formData.connection_timeout || 5}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+              >
+                <option value={5}>5秒</option>
+                <option value={10}>10秒</option>
+                <option value={30}>30秒</option>
+                <option value={60}>60秒</option>
+                <option value={120}>120秒</option>
+              </select>
             </div>
           </div>
         )}
