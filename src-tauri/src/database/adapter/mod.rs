@@ -187,7 +187,7 @@ pub trait DatabaseAdapter: Send + Sync {
 }
 
 /// Factory function to create appropriate adapter
-pub fn create_adapter(database_type: DatabaseType) -> Result<Box<dyn DatabaseAdapter>, AppError> {
+pub fn create_adapter(database_type: DatabaseType) -> Result<Box<dyn DatabaseAdapter + Send + Sync>, AppError> {
     match database_type {
         DatabaseType::PostgreSQL => Ok(Box::new(postgres::PostgresAdapter::new())),
         DatabaseType::MySQL => Ok(Box::new(mysql::MySqlAdapter::new())),
