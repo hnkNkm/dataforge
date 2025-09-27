@@ -3,7 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ConnectionForm } from "./components/ConnectionForm";
 import { DatabaseExplorer } from "./components/DatabaseExplorer";
 import { TableView } from "./components/TableView";
-import { QueryEditor } from "./components/QueryEditor";
+import { MonacoQueryEditor } from "./components/MonacoQueryEditor";
 import { Database, FileText, History, Play, FolderTree, Plus, X, Settings } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
@@ -162,7 +162,7 @@ function App() {
                         )}
                       >
                         {tab.type === 'query' ? (
-                          <QueryEditor
+                          <MonacoQueryEditor
                             initialContent={tab.content || 'SELECT * FROM '}
                             onContentChange={(content) => updateTab(tab.id, { content })}
                           />

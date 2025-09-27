@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import Editor, { Monaco } from '@monaco-editor/react';
+import { editor } from 'monaco-editor';
 import { invoke } from '@tauri-apps/api/core';
-import { Play, Save, Loader2 } from 'lucide-react';
+import { Play, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { toast } from 'sonner';
+import { useTheme } from 'next-themes';
 
-interface QueryEditorProps {
+interface MonacoQueryEditorProps {
   initialContent?: string;
   onContentChange?: (content: string) => void;
 }
 
-export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange }: QueryEditorProps) {
+export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContentChange }: MonacoQueryEditorProps) {
   const [query, setQuery] = useState(initialContent);
   const [results, setResults] = useState<any>(null);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
@@ -18,6 +21,66 @@ export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange
   const [error, setError] = useState<string | null>(null);
   const [executionTime, setExecutionTime] = useState<number | null>(null);
   const { currentProfile } = useConnectionStore();
+  const { resolvedTheme } = useTheme();
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+
+  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    editorRef.current = editor;
+
+    // Register SQL completion provider
+    monaco.languages.registerCompletionItemProvider('sql', {
+      provideCompletionItems: (model, position) => {
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn: word.endColumn,
+        };
+
+        // Basic SQL keywords
+        const keywords = [
+          'SELECT', 'FROM', 'WHERE', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP',
+          'ALTER', 'TABLE', 'INDEX', 'VIEW', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER',
+          'ON', 'AS', 'ORDER', 'BY', 'GROUP', 'HAVING', 'DISTINCT', 'LIMIT', 'OFFSET',
+          'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE', 'IS', 'NULL',
+          'VALUES', 'INTO', 'SET', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES',
+          'CASCADE', 'RESTRICT', 'DEFAULT', 'UNIQUE', 'CHECK', 'CONSTRAINT'
+        ];
+
+        const suggestions = keywords.map(keyword => ({
+          label: keyword,
+          kind: monaco.languages.CompletionItemKind.Keyword,
+          insertText: keyword,
+          range: range,
+        }));
+
+        return { suggestions };
+      },
+    });
+
+    // Add keyboard shortcut for execution
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      handleExecute();
+    });
+
+    // Configure editor options
+    editor.updateOptions({
+      minimap: { enabled: false },
+      fontSize: 14,
+      lineNumbers: 'on',
+      roundedSelection: false,
+      scrollBeyondLastLine: false,
+      wordWrap: 'on',
+      automaticLayout: true,
+      suggestOnTriggerCharacters: true,
+      quickSuggestions: {
+        other: true,
+        comments: false,
+        strings: false,
+      },
+    });
+  };
 
   const handleExecute = async () => {
     if (!currentProfile) {
@@ -25,7 +88,8 @@ export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange
       return;
     }
 
-    if (!query.trim()) {
+    const currentQuery = editorRef.current?.getValue() || query;
+    if (!currentQuery.trim()) {
       toast.error('クエリを入力してください');
       return;
     }
@@ -36,7 +100,7 @@ export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange
     const startTime = Date.now();
 
     try {
-      const result = await invoke<any>('execute_query', { query });
+      const result = await invoke<any>('execute_query', { query: currentQuery });
       const endTime = Date.now();
       setExecutionTime(endTime - startTime);
 
@@ -62,18 +126,12 @@ export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange
     }
   };
 
-  const handleQueryChange = (value: string) => {
-    setQuery(value);
-    if (onContentChange) {
-      onContentChange(value);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Cmd/Ctrl + Enter でクエリ実行
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      handleExecute();
+  const handleEditorChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setQuery(value);
+      if (onContentChange) {
+        onContentChange(value);
+      }
     }
   };
 
@@ -106,14 +164,23 @@ export function QueryEditor({ initialContent = 'SELECT * FROM ', onContentChange
           </div>
         </div>
 
-        <div className="flex-1 p-2 min-h-0">
-          <textarea
-            className="w-full h-full bg-muted/20 border rounded-md p-3 resize-none outline-none font-mono text-sm focus:ring-2 focus:ring-primary/20"
-            placeholder="SELECT * FROM ..."
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={loading}
+        <div className="flex-1 min-h-0">
+          <Editor
+            height="100%"
+            defaultLanguage="sql"
+            defaultValue={initialContent}
+            theme={resolvedTheme === 'dark' ? 'vs-dark' : 'light'}
+            onChange={handleEditorChange}
+            onMount={handleEditorDidMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: 'on',
+              roundedSelection: false,
+              scrollBeyondLastLine: false,
+              wordWrap: 'on',
+              automaticLayout: true,
+            }}
           />
         </div>
       </div>
