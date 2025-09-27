@@ -11,6 +11,7 @@ export interface ConnectionProfile {
   ssl_mode?: string;
   color?: string;
   icon?: string;
+  project?: string;
   created_at: string;
   updated_at: string;
   last_connected?: string;
