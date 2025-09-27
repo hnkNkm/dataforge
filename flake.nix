@@ -25,6 +25,13 @@
       {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
+            # shell
+            git
+            zsh
+            zsh-completions
+            zsh-syntax-highlighting
+            zsh-autosuggestions
+
             # Rust
             rustToolchain
             cargo-tauri
@@ -56,6 +63,12 @@
           ];
 
           shellHook = ''
+            export SHELL=${pkgs.zsh}/bin/zsh
+            if [ -z "$ZSH_VERSION" ]; then
+              exec $SHELL
+            fi
+
+            # 初期化ログ
             echo "DataForge Development Environment"
             echo "Node.js: $(node --version)"
             echo "pnpm: $(pnpm --version)"
@@ -80,6 +93,15 @@
             echo "    mysql -u root                                             - Connect to MySQL"
             echo "  SQLite:"
             echo "    sqlite3 ./database/sqlite/dataforge.db - Create/Connect to SQLite database"
+
+            # zsh 補完 & プラグイン設定
+            if [ -n "$ZSH_VERSION" ]; then
+              autoload -Uz compinit
+              compinit
+
+              source ${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+              source ${pkgs.zsh-autosuggestions}/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+            fi
           '';
 
           # Environment variables for Tauri
