@@ -1,5 +1,6 @@
 use crate::database::adapter::{ConnectionParams, DatabaseAdapter, DatabaseType, create_adapter};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -125,9 +126,29 @@ pub async fn execute_query(query: String) -> Result<serde_json::Value, String> {
         let result = adapter.execute_query(&query).await
             .map_err(|e| format!("Query failed: {}", e))?;
 
-        // Convert to JSON
-        return serde_json::to_value(result)
-            .map_err(|e| format!("Serialization failed: {}", e));
+        // Convert QueryResult to a more frontend-friendly format
+        // Transform rows from array format to object format
+        let transformed_rows: Vec<serde_json::Value> = result.rows.iter().map(|row| {
+            let mut obj = serde_json::Map::new();
+            for (i, column) in row.columns.iter().enumerate() {
+                let value = row.values.get(i)
+                    .and_then(|v| v.as_ref())
+                    .map(|v| serde_json::Value::String(v.clone()))
+                    .unwrap_or(serde_json::Value::Null);
+                obj.insert(column.clone(), value);
+            }
+            serde_json::Value::Object(obj)
+        }).collect();
+
+        // Build the response object
+        let response = serde_json::json!({
+            "columns": result.columns,
+            "rows": transformed_rows,
+            "rows_affected": result.rows_affected,
+            "execution_time": result.execution_time
+        });
+
+        return Ok(response);
     }
 
     Err("No active connection".to_string())
@@ -154,14 +175,25 @@ pub async fn list_database_tables() -> Result<serde_json::Value, String> {
     let adapter_state = ADAPTER_STATE.lock().await;
 
     if let Some(adapter) = adapter_state.as_ref() {
+        crate::log_info!("command", "Fetching database tables...");
         let tables = adapter.list_tables().await
-            .map_err(|e| format!("Failed to list tables: {}", e))?;
+            .map_err(|e| {
+                let error_msg = format!("Failed to list tables: {}", e);
+                crate::log_info!("command", "{}", error_msg);
+                error_msg
+            })?;
+
+        crate::log_info!("command", "Found {} tables", tables.len());
 
         // Convert to JSON
-        return serde_json::to_value(tables)
-            .map_err(|e| format!("Serialization failed: {}", e));
+        let json_value = serde_json::to_value(tables)
+            .map_err(|e| format!("Serialization failed: {}", e))?;
+
+        crate::log_info!("command", "Returning tables JSON: {:?}", json_value);
+        return Ok(json_value);
     }
 
+    crate::log_info!("command", "No active connection");
     Err("No active connection".to_string())
 }
 

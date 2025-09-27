@@ -1,17 +1,29 @@
 import { useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ConnectionForm } from "./components/ConnectionForm";
-import { Database, FileText, History, Play } from "lucide-react";
+import { DatabaseExplorer } from "./components/DatabaseExplorer";
+import { TableView } from "./components/TableView";
+import { QueryEditor } from "./components/QueryEditor";
+import { Database, FileText, History, Play, FolderTree, Plus, X, Settings } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Toaster } from "./components/ui/sonner";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "./components/ui/resizable";
 import { useConnectionStore } from "./stores/connectionStore";
+import { useTabStore } from "./stores/tabStore";
 import { ConnectionProfile } from "./types/profile";
+import { cn } from "./lib/utils";
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showConnectionForm, setShowConnectionForm] = useState(false);
   const [editingProfile, setEditingProfile] = useState<ConnectionProfile | null>(null);
   const { currentProfile } = useConnectionStore();
+  const { tabs, activeTabId, removeTab, setActiveTab, openQueryTab, updateTab } = useTabStore();
 
   const handleNewConnection = () => {
     setEditingProfile(null);
@@ -74,56 +86,95 @@ function App() {
               />
             </div>
           ) : currentProfile ? (
-            <div className="h-full flex flex-col">
-              <Tabs defaultValue="query" className="flex-1 flex flex-col">
-                <div className="border-b px-4">
-                  <TabsList className="h-10 bg-transparent">
-                    <TabsTrigger value="query" className="gap-2">
-                      <FileText className="w-4 h-4" />
-                      クエリ
-                    </TabsTrigger>
-                    <TabsTrigger value="history" className="gap-2">
-                      <History className="w-4 h-4" />
-                      履歴
-                    </TabsTrigger>
-                  </TabsList>
+            <ResizablePanelGroup direction="horizontal">
+              {/* データベースエクスプローラー */}
+              <ResizablePanel defaultSize={25} minSize={15} maxSize={40}>
+                <Tabs defaultValue="explorer" className="h-full flex flex-col">
+                  <div className="border-b px-2">
+                    <TabsList className="h-10 bg-transparent">
+                      <TabsTrigger value="explorer" className="gap-2">
+                        <FolderTree className="w-4 h-4" />
+                        エクスプローラー
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                  <TabsContent value="explorer" className="flex-1 m-0">
+                    <DatabaseExplorer />
+                  </TabsContent>
+                </Tabs>
+              </ResizablePanel>
+
+              <ResizableHandle />
+
+              {/* メインコンテンツエリア */}
+              <ResizablePanel defaultSize={75}>
+                <div className="h-full flex flex-col">
+                  {/* タブヘッダー */}
+                  <div className="border-b flex items-center">
+                    <div className="flex-1 flex items-center overflow-x-auto">
+                      {tabs.map((tab) => (
+                        <div
+                          key={tab.id}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 border-r cursor-pointer hover:bg-accent/50 min-w-[120px]",
+                            activeTabId === tab.id && "bg-accent"
+                          )}
+                          onClick={() => setActiveTab(tab.id)}
+                        >
+                          {tab.type === 'query' ? (
+                            <FileText className="w-3 h-3" />
+                          ) : (
+                            <Database className="w-3 h-3" />
+                          )}
+                          <span className="text-sm truncate flex-1">{tab.title}</span>
+                          {tabs.length > 1 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeTab(tab.id);
+                              }}
+                              className="hover:bg-destructive/20 rounded p-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-2"
+                        onClick={() => openQueryTab()}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* タブコンテンツ */}
+                  <div className="flex-1 overflow-hidden">
+                    {tabs.map((tab) => (
+                      <div
+                        key={tab.id}
+                        className={cn(
+                          "h-full",
+                          activeTabId === tab.id ? "block" : "hidden"
+                        )}
+                      >
+                        {tab.type === 'query' ? (
+                          <QueryEditor
+                            initialContent={tab.content || 'SELECT * FROM '}
+                            onContentChange={(content) => updateTab(tab.id, { content })}
+                          />
+                        ) : (
+                          <TableView tableName={tab.tableName || ''} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <TabsContent value="query" className="flex-1 m-0 p-4">
-                  <div className="h-full flex flex-col gap-4">
-                    <div className="flex-1 bg-muted/20 rounded-md p-4 border">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="text-sm text-muted-foreground">
-                          SQLエディター
-                        </div>
-                        <Button size="sm" className="gap-2">
-                          <Play className="w-4 h-4" />
-                          実行
-                        </Button>
-                      </div>
-                      <textarea
-                        className="w-full h-[calc(100%-3rem)] bg-transparent resize-none outline-none font-mono text-sm"
-                        placeholder="SELECT * FROM ..."
-                      />
-                    </div>
-                    <div className="h-1/3 bg-background border rounded-md">
-                      <div className="border-b px-4 py-2">
-                        <h3 className="text-sm font-semibold">結果</h3>
-                      </div>
-                      <div className="p-4">
-                        <div className="text-sm text-muted-foreground">
-                          クエリを実行すると結果がここに表示されます
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="history" className="flex-1 m-0 p-4">
-                  <div className="text-sm text-muted-foreground">
-                    クエリ履歴
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
@@ -149,6 +200,7 @@ function App() {
           </div>
         </footer>
       </div>
+      <Toaster />
     </div>
   );
 }

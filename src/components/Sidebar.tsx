@@ -15,6 +15,8 @@ import {
   Play,
   Edit2,
   Trash2,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,10 +26,21 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { ConnectionProfile } from '@/types/profile';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -42,10 +55,12 @@ interface ProjectGroup {
 }
 
 export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }: SidebarProps) {
-  const { profiles } = useProfileStore();
-  const { connectWithProfile, currentProfile, disconnect } = useConnectionStore();
+  const { profiles, deleteProfile } = useProfileStore();
+  const { connectWithProfile, currentProfile, disconnect, isConnecting } = useConnectionStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['default']));
   const [expandedConnections, setExpandedConnections] = useState<Set<string>>(new Set());
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [deletingProfile, setDeletingProfile] = useState<ConnectionProfile | null>(null);
 
   // プロジェクトごとにグループ化
   const groupedProfiles = profiles.reduce<Record<string, ConnectionProfile[]>>((groups, profile) => {
@@ -91,10 +106,44 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
   };
 
   const handleConnect = async (profile: ConnectionProfile) => {
+    setConnectingId(profile.id);
     try {
       await connectWithProfile(profile.id);
+      toast.success('接続成功', {
+        description: `${profile.name}に接続しました`,
+      });
     } catch (error) {
       console.error('Failed to connect:', error);
+      toast.error('接続失敗', {
+        description: error instanceof Error ? error.message : '接続に失敗しました',
+      });
+    } finally {
+      setConnectingId(null);
+    }
+  };
+
+  const handleDelete = async (profile: ConnectionProfile) => {
+    try {
+      await deleteProfile(profile.id);
+      toast.success('削除完了', {
+        description: `${profile.name}を削除しました`,
+      });
+      setDeletingProfile(null);
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      toast.error('削除失敗', {
+        description: '削除に失敗しました',
+      });
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await disconnect();
+      toast.success('切断しました');
+    } catch (error) {
+      console.error('Failed to disconnect:', error);
+      toast.error('切断に失敗しました');
     }
   };
 
@@ -170,9 +219,10 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
                       <div key={profile.id} className="mt-1">
                         <div
                           className={cn(
-                            "flex items-center gap-1 p-1 rounded text-sm",
+                            "flex items-center gap-1 p-1 rounded text-sm cursor-pointer",
                             isConnected ? "bg-accent" : "hover:bg-accent/50"
                           )}
+                          onDoubleClick={() => !isConnected && handleConnect(profile)}
                         >
                           <button
                             onClick={() => toggleConnection(profile.id)}
@@ -193,8 +243,13 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
                                 size="icon"
                                 className="h-6 w-6"
                                 onClick={() => handleConnect(profile)}
+                                disabled={connectingId === profile.id}
                               >
-                                <Play className="w-3 h-3" />
+                                {connectingId === profile.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Play className="w-3 h-3" />
+                                )}
                               </Button>
                             )}
                             <Button
@@ -202,9 +257,20 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
                               size="icon"
                               className="h-6 w-6"
                               onClick={() => onEditConnection(profile)}
+                              disabled={isConnected}
                             >
                               <Edit2 className="w-3 h-3" />
                             </Button>
+                            {!isConnected && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 hover:text-destructive"
+                                onClick={() => setDeletingProfile(profile)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                         {isExpanded && (
@@ -258,7 +324,7 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
             <Button
               variant="outline"
               size="sm"
-              onClick={disconnect}
+              onClick={handleDisconnect}
               className="w-full mt-1"
             >
               切断
@@ -274,6 +340,33 @@ export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }:
           {isOpen && <span className="ml-2">設定</span>}
         </Button>
       </div>
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog open={!!deletingProfile} onOpenChange={() => setDeletingProfile(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                接続プロファイルの削除
+              </div>
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              「{deletingProfile?.name}」を削除してもよろしいですか？
+              この操作は取り消すことができません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingProfile && handleDelete(deletingProfile)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

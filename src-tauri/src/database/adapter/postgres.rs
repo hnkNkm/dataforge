@@ -132,9 +132,22 @@ impl DatabaseAdapter for PostgresAdapter {
             .map(|row| {
                 let values: Vec<Option<String>> = (0..row.columns().len())
                     .map(|i| {
-                        // Try to get value as string
-                        row.try_get::<Option<String>, _>(i)
-                            .unwrap_or(None)
+                        // Try different types to get the value as string
+                        if let Ok(val) = row.try_get::<Option<String>, _>(i) {
+                            val
+                        } else if let Ok(val) = row.try_get::<Option<i32>, _>(i) {
+                            val.map(|v| v.to_string())
+                        } else if let Ok(val) = row.try_get::<Option<i64>, _>(i) {
+                            val.map(|v| v.to_string())
+                        } else if let Ok(val) = row.try_get::<Option<f64>, _>(i) {
+                            val.map(|v| v.to_string())
+                        } else if let Ok(val) = row.try_get::<Option<bool>, _>(i) {
+                            val.map(|v| v.to_string())
+                        } else if let Ok(val) = row.try_get::<Option<chrono::NaiveDateTime>, _>(i) {
+                            val.map(|v| v.to_string())
+                        } else {
+                            None
+                        }
                     })
                     .collect();
 
@@ -231,6 +244,7 @@ impl DatabaseAdapter for PostgresAdapter {
 
     async fn list_tables(&self) -> Result<Vec<TableInfo>, AppError> {
         let pool = self.get_pool()?;
+        crate::log_info!("postgres_adapter", "Executing list_tables query");
 
         let rows = sqlx::query(
             r#"
@@ -250,8 +264,12 @@ impl DatabaseAdapter for PostgresAdapter {
         .fetch_all(pool)
         .await
         .map_err(|e| {
+            let error_msg = format!("Query failed: {}", e);
+            crate::log_info!("postgres_adapter", "{}", error_msg);
             AppError::Database(crate::database::DatabaseError::QueryFailed(e.to_string()))
         })?;
+
+        crate::log_info!("postgres_adapter", "Found {} rows from pg_tables", rows.len());
 
         let mut tables = Vec::new();
         for row in rows {
@@ -264,6 +282,8 @@ impl DatabaseAdapter for PostgresAdapter {
             let table_type: String = row.try_get(2).map_err(|e| {
                 AppError::Database(crate::database::DatabaseError::QueryFailed(e.to_string()))
             })?;
+
+            crate::log_info!("postgres_adapter", "Found table: {}.{} (type: {})", schema, name, table_type);
 
             tables.push(TableInfo {
                 name,
