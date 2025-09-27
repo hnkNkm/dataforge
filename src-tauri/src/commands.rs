@@ -123,32 +123,106 @@ pub async fn execute_query(query: String) -> Result<serde_json::Value, String> {
     let adapter_state = ADAPTER_STATE.lock().await;
 
     if let Some(adapter) = adapter_state.as_ref() {
-        let result = adapter.execute_query(&query).await
-            .map_err(|e| format!("Query failed: {}", e))?;
+        // Get database type for SQL parsing
+        let db_type = adapter.database_type();
 
-        // Convert QueryResult to a more frontend-friendly format
-        // Transform rows from array format to object format
-        let transformed_rows: Vec<serde_json::Value> = result.rows.iter().map(|row| {
-            let mut obj = serde_json::Map::new();
-            for (i, column) in row.columns.iter().enumerate() {
-                let value = row.values.get(i)
-                    .and_then(|v| v.as_ref())
-                    .map(|v| serde_json::Value::String(v.clone()))
-                    .unwrap_or(serde_json::Value::Null);
-                obj.insert(column.clone(), value);
+        // Split SQL statements
+        let statements = crate::database::sql_utils::split_sql_statements(&query, &db_type)
+            .map_err(|e| format!("Failed to parse SQL: {}", e))?;
+
+        if statements.is_empty() {
+            return Err("No valid SQL statements found".to_string());
+        }
+
+        let mut results = Vec::new();
+        let mut total_execution_time = 0u64;
+        let mut total_rows_affected = 0u64;
+
+        // Execute each statement
+        for statement in statements {
+            let trimmed = statement.trim();
+            if trimmed.is_empty() {
+                continue;
             }
-            serde_json::Value::Object(obj)
-        }).collect();
 
-        // Build the response object
-        let response = serde_json::json!({
-            "columns": result.columns,
-            "rows": transformed_rows,
-            "rows_affected": result.rows_affected,
-            "execution_time": result.execution_time
-        });
+            let start = std::time::Instant::now();
 
-        return Ok(response);
+            // Try to execute as query first (SELECT, SHOW, etc.)
+            match adapter.execute_query(trimmed).await {
+                Ok(result) => {
+                    let exec_time = start.elapsed().as_millis() as u64;
+                    total_execution_time += exec_time;
+
+                    // Transform rows from array format to object format
+                    let transformed_rows: Vec<serde_json::Value> = result.rows.iter().map(|row| {
+                        let mut obj = serde_json::Map::new();
+                        for (i, column) in row.columns.iter().enumerate() {
+                            let value = row.values.get(i)
+                                .and_then(|v| v.as_ref())
+                                .map(|v| serde_json::Value::String(v.clone()))
+                                .unwrap_or(serde_json::Value::Null);
+                            obj.insert(column.clone(), value);
+                        }
+                        serde_json::Value::Object(obj)
+                    }).collect();
+
+                    results.push(serde_json::json!({
+                        "type": "query",
+                        "statement": trimmed,
+                        "columns": result.columns,
+                        "rows": transformed_rows,
+                        "rows_affected": result.rows_affected,
+                        "execution_time": exec_time
+                    }));
+                }
+                Err(_) => {
+                    // If query fails, try as command (INSERT, UPDATE, DELETE, etc.)
+                    match adapter.execute_command(trimmed).await {
+                        Ok(affected) => {
+                            let exec_time = start.elapsed().as_millis() as u64;
+                            total_execution_time += exec_time;
+                            total_rows_affected += affected;
+
+                            results.push(serde_json::json!({
+                                "type": "command",
+                                "statement": trimmed,
+                                "rows_affected": affected,
+                                "execution_time": exec_time
+                            }));
+                        }
+                        Err(e) => {
+                            return Err(format!("Failed to execute statement: {}\nStatement: {}", e, trimmed));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Return results
+        if results.is_empty() {
+            return Err("No results from execution".to_string());
+        }
+
+        // If single result and it's a query, return in backward-compatible format
+        if results.len() == 1 {
+            if let Some(first) = results.first() {
+                if first["type"] == "query" {
+                    return Ok(serde_json::json!({
+                        "columns": first["columns"],
+                        "rows": first["rows"],
+                        "rows_affected": first["rows_affected"],
+                        "execution_time": first["execution_time"]
+                    }));
+                }
+            }
+        }
+
+        // Return multiple results
+        return Ok(serde_json::json!({
+            "results": results,
+            "total_execution_time": total_execution_time,
+            "total_rows_affected": total_rows_affected
+        }));
     }
 
     Err("No active connection".to_string())

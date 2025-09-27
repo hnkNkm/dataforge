@@ -27,7 +27,7 @@ dist-ssr
 src-tauri/target/
 
 # Database data directories
-database/
+/database/
 
 .env
 *.env.local
