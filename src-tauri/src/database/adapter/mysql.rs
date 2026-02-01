@@ -7,11 +7,14 @@ use super::{
     ColumnInfo, ConnectionParams, DatabaseAdapter, DatabaseMetadata, DatabaseType, QueryResult,
     QueryRow, TableInfo,
 };
+use crate::database::dialect::{SqlDialect, MySQLDialect};
+use crate::database::capabilities::{DatabaseCapabilities, QueryTemplates};
 use crate::error::AppError;
 
 pub struct MySqlAdapter {
     pool: Option<MySqlPool>,
     connected: bool,
+    dialect: MySQLDialect,
 }
 
 impl MySqlAdapter {
@@ -19,6 +22,7 @@ impl MySqlAdapter {
         Self {
             pool: None,
             connected: false,
+            dialect: MySQLDialect::new(),
         }
     }
 
@@ -245,9 +249,9 @@ impl DatabaseAdapter for MySqlAdapter {
         let rows = sqlx::query(
             r#"
             SELECT
-                TABLE_SCHEMA,
-                TABLE_NAME,
-                TABLE_TYPE
+                CAST(TABLE_SCHEMA AS CHAR) AS TABLE_SCHEMA,
+                CAST(TABLE_NAME AS CHAR) AS TABLE_NAME,
+                CAST(TABLE_TYPE AS CHAR) AS TABLE_TYPE
             FROM information_schema.tables
             WHERE TABLE_SCHEMA = DATABASE()
             ORDER BY TABLE_NAME
@@ -356,6 +360,18 @@ impl DatabaseAdapter for MySqlAdapter {
 
     fn database_type(&self) -> DatabaseType {
         DatabaseType::MySQL
+    }
+    
+    fn get_dialect(&self) -> Box<dyn SqlDialect> {
+        Box::new(self.dialect.clone())
+    }
+    
+    fn get_capabilities(&self) -> DatabaseCapabilities {
+        DatabaseCapabilities::mysql()
+    }
+    
+    fn get_query_templates(&self) -> QueryTemplates {
+        QueryTemplates::mysql()
     }
 }
 

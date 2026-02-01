@@ -8,12 +8,15 @@ use super::{
     ColumnInfo, ConnectionParams, DatabaseAdapter, DatabaseMetadata, DatabaseType, QueryResult,
     QueryRow, TableInfo,
 };
+use crate::database::dialect::{SqlDialect, SQLiteDialect};
+use crate::database::capabilities::{DatabaseCapabilities, QueryTemplates};
 use crate::error::AppError;
 
 pub struct SqliteAdapter {
     pool: Option<SqlitePool>,
     connected: bool,
     database_path: String,
+    dialect: SQLiteDialect,
 }
 
 impl SqliteAdapter {
@@ -22,6 +25,7 @@ impl SqliteAdapter {
             pool: None,
             connected: false,
             database_path: String::new(),
+            dialect: SQLiteDialect::new(),
         }
     }
 
@@ -340,6 +344,18 @@ impl DatabaseAdapter for SqliteAdapter {
 
     fn database_type(&self) -> DatabaseType {
         DatabaseType::SQLite
+    }
+    
+    fn get_dialect(&self) -> Box<dyn SqlDialect> {
+        Box::new(self.dialect.clone())
+    }
+    
+    fn get_capabilities(&self) -> DatabaseCapabilities {
+        DatabaseCapabilities::sqlite()
+    }
+    
+    fn get_query_templates(&self) -> QueryTemplates {
+        QueryTemplates::sqlite()
     }
 }
 
