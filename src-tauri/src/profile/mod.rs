@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use tauri::AppHandle;
 use crate::database::adapter::{ConnectionParams, DatabaseType};
 use crate::error::AppError;
 
@@ -80,8 +81,8 @@ pub struct ProfileManager {
 
 impl ProfileManager {
     /// Create a new profile manager
-    pub fn new() -> Result<Self, AppError> {
-        let storage = storage::ProfileStorage::new()?;
+    pub fn new(app_handle: &AppHandle) -> Result<Self, AppError> {
+        let storage = storage::ProfileStorage::new(app_handle)?;
         Ok(Self { storage })
     }
 
