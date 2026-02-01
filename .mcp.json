@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "pnpm": {
+      "command": "npx",
+      "args": ["-y", "@jixo/mcp-pnpm"]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    },
+    "tauri": {
+      "command": "npx",
+      "args": ["-y", "@hypothesi/tauri-mcp-server"],
+      "env": {
+        "TAURI_APP_NAME": "DataForge",
+        "TAURI_APP_PORT": "9223"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", ".", "/Users/hnk/product/dataforge"]
+    }
+  }
+}
