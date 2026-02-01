@@ -1,10 +1,13 @@
 pub mod adapter;
 pub mod config;
 pub mod connection;
+pub mod dialect;
 pub mod error;
 pub mod sql_utils;
+pub mod capabilities;
 
 pub use adapter::{DatabaseAdapter, DatabaseType, ConnectionParams, create_adapter};
 pub use config::DatabaseConfig;
 pub use connection::DatabaseConnection;
 pub use error::{DatabaseError, Result};
+pub use capabilities::{DatabaseCapabilities, QueryTemplates};

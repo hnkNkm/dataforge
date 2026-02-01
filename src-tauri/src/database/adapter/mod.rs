@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::AppError;
+use crate::database::dialect::SqlDialect;
+use crate::database::capabilities::{DatabaseCapabilities, QueryTemplates};
 
 pub mod postgres;
 pub mod mysql;
@@ -184,6 +186,15 @@ pub trait DatabaseAdapter: Send + Sync {
 
     /// Get the database type
     fn database_type(&self) -> DatabaseType;
+    
+    /// Get the SQL dialect for this database
+    fn get_dialect(&self) -> Box<dyn SqlDialect>;
+    
+    /// Get the capabilities for this database
+    fn get_capabilities(&self) -> DatabaseCapabilities;
+    
+    /// Get query templates for this database
+    fn get_query_templates(&self) -> QueryTemplates;
 }
 
 /// Factory function to create appropriate adapter

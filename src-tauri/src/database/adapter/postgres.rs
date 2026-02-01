@@ -7,11 +7,14 @@ use super::{
     ColumnInfo, ConnectionParams, DatabaseAdapter, DatabaseMetadata, DatabaseType, QueryResult,
     QueryRow, TableInfo,
 };
+use crate::database::dialect::{SqlDialect, PostgreSQLDialect};
+use crate::database::capabilities::{DatabaseCapabilities, QueryTemplates};
 use crate::error::AppError;
 
 pub struct PostgresAdapter {
     pool: Option<PgPool>,
     connected: bool,
+    dialect: PostgreSQLDialect,
 }
 
 impl PostgresAdapter {
@@ -19,6 +22,7 @@ impl PostgresAdapter {
         Self {
             pool: None,
             connected: false,
+            dialect: PostgreSQLDialect::new(),
         }
     }
 
@@ -360,6 +364,18 @@ impl DatabaseAdapter for PostgresAdapter {
 
     fn database_type(&self) -> DatabaseType {
         DatabaseType::PostgreSQL
+    }
+    
+    fn get_dialect(&self) -> Box<dyn SqlDialect> {
+        Box::new(self.dialect.clone())
+    }
+    
+    fn get_capabilities(&self) -> DatabaseCapabilities {
+        DatabaseCapabilities::postgresql()
+    }
+    
+    fn get_query_templates(&self) -> QueryTemplates {
+        QueryTemplates::postgresql()
     }
 }
 
