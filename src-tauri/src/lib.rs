@@ -61,9 +61,18 @@ pub fn run() {
 
     log_info!("main", "Starting DataForge application");
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(commands::profile::ProfileManagerState::new())
+        .manage(commands::profile::ProfileManagerState::new());
+    
+    // Add MCP Bridge plugin for development builds
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(tauri_plugin_mcp_bridge::init());
+        log_info!("main", "MCP Bridge plugin enabled for development");
+    }
+    
+    builder
         .invoke_handler(tauri::generate_handler![
             greet,
             test_database_connection,

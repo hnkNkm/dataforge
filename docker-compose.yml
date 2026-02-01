@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dataforge-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: dataforge
+      POSTGRES_PASSWORD: dataforge_dev
+      POSTGRES_DB: dataforge_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init/postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dataforge -d dataforge_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    container_name: dataforge-mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: dataforge_dev
+      MYSQL_USER: dataforge
+      MYSQL_PASSWORD: dataforge_dev
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init/mysql:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SQLiteはファイルベースなのでコンテナ不要
+  # 必要に応じてローカルファイルを使用
+
+volumes:
+  postgres_data:
+    name: dataforge_postgres_data
+  mysql_data:
+    name: dataforge_mysql_data
