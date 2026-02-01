@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { ConnectionForm } from "./components/ConnectionForm";
-import { DatabaseExplorer } from "./components/DatabaseExplorer";
+import { DatabaseExplorerEnhanced } from "./components/DatabaseExplorerEnhanced";
 import { TableView } from "./components/TableView";
 import { MonacoQueryEditor } from "./components/MonacoQueryEditor";
 import { Database, FileText, History, Play, FolderTree, Plus, X, Settings } from "lucide-react";
@@ -99,7 +99,7 @@ function App() {
                     </TabsList>
                   </div>
                   <TabsContent value="explorer" className="flex-1 m-0">
-                    <DatabaseExplorer />
+                    <DatabaseExplorerEnhanced />
                   </TabsContent>
                 </Tabs>
               </ResizablePanel>
