@@ -56,6 +56,9 @@ pnpm preview  # Preview built app
   - `src/lib.rs` - Tauri commands and core logic
   - `src/database/` - Database adapter pattern implementation
     - `adapter/` - Database-specific implementations (postgres.rs, mysql.rs, sqlite.rs)
+    - `dialect/` - SQL dialect implementations for each database
+    - `capabilities.rs` - Database feature detection
+    - `templates.rs` - Common SQL operation templates
     - `connection.rs` - Connection management
     - `config.rs` - Configuration handling
   - `tauri.conf.json` - Tauri configuration
@@ -70,7 +73,10 @@ pnpm preview  # Preview built app
 ### Database Adapter Pattern
 The backend implements a trait-based adapter pattern for multi-database support:
 - Common `DatabaseAdapter` trait in `src-tauri/src/database/adapter/mod.rs`
-- Specific implementations for each database type
+- Specific implementations for each database type (PostgreSQL, MySQL, SQLite)
+- `SqlDialect` trait for database-specific SQL generation
+- `DatabaseCapabilities` for feature detection per database
+- `QueryTemplates` for common SQL operation templates
 - Connection profiles stored with OS keychain integration for security
 
 ## Key Dependencies
