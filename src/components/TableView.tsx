@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, RefreshCw, Download, Search } from 'lucide-react';
+import { Loader2, RefreshCw, Download, Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useConnectionStore } from '@/stores/connectionStore';
@@ -26,6 +26,8 @@ export function TableView({ tableName }: TableViewProps) {
   const [limit, setLimit] = useState(100);
   const [offset, setOffset] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const { currentProfile } = useConnectionStore();
 
   const loadTableData = async () => {
@@ -72,9 +74,137 @@ export function TableView({ tableName }: TableViewProps) {
   };
 
   const handleExport = () => {
-    // CSVエクスポート機能（将来実装）
-    toast.info('エクスポート機能は準備中です');
+    if (!sortedData?.rows || sortedData.rows.length === 0) {
+      toast.error('エクスポートするデータがありません');
+      return;
+    }
+
+    try {
+      // CSVデータを生成
+      const csvRows: string[] = [];
+      
+      // BOMを追加（Excelで文字化けを防ぐため）
+      const BOM = '\uFEFF';
+      
+      // ヘッダー行を追加
+      const headers = sortedData.columns.map(col => {
+        // カンマやダブルクォートを含む場合はダブルクォートで囲む
+        const value = col.name;
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      });
+      csvRows.push(headers.join(','));
+      
+      // データ行を追加
+      sortedData.rows.forEach(row => {
+        const values = sortedData.columns.map(col => {
+          const value = row[col.name];
+          if (value === null || value === undefined) {
+            return '';
+          }
+          const strValue = String(value);
+          // カンマやダブルクォートを含む場合はダブルクォートで囲む
+          if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+            return `"${strValue.replace(/"/g, '""')}"`;
+          }
+          return strValue;
+        });
+        csvRows.push(values.join(','));
+      });
+      
+      const csvContent = BOM + csvRows.join('\n');
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `${tableName}_${timestamp}.csv`;
+      
+      // Blobを作成してダウンロード
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success('CSVファイルをエクスポートしました');
+    } catch (error) {
+      console.error('CSV export failed:', error);
+      toast.error('CSVエクスポートに失敗しました');
+    }
   };
+
+  // ソート機能
+  const handleSort = (columnName: string) => {
+    if (sortColumn === columnName) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(columnName);
+      setSortDirection('asc');
+    }
+  };
+
+  // ソートアイコンを取得
+  const getSortIcon = (columnName: string) => {
+    if (sortColumn !== columnName) {
+      return <ChevronsUpDown className="w-3 h-3 opacity-50" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ChevronUp className="w-3 h-3" />
+      : <ChevronDown className="w-3 h-3" />;
+  };
+
+  // ソート済みデータを計算
+  const sortedData = useMemo(() => {
+    if (!data?.rows || !sortColumn) return data;
+
+    const sortedRows = [...data.rows].sort((a, b) => {
+      const aValue = a[sortColumn] ?? '';
+      const bValue = b[sortColumn] ?? '';
+      
+      // NULL値の処理
+      if (aValue === '' && bValue === '') return 0;
+      if (aValue === '') return sortDirection === 'asc' ? 1 : -1;
+      if (bValue === '') return sortDirection === 'asc' ? -1 : 1;
+      
+      // 数値判定と比較
+      const aNum = parseFloat(aValue);
+      const bNum = parseFloat(bValue);
+      const isNumeric = !isNaN(aNum) && !isNaN(bNum) && 
+                       String(aValue).trim() === String(aNum) && 
+                       String(bValue).trim() === String(bNum);
+      
+      if (isNumeric) {
+        return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      
+      // 日付判定と比較
+      const aDate = new Date(aValue);
+      const bDate = new Date(bValue);
+      const isDate = !isNaN(aDate.getTime()) && !isNaN(bDate.getTime()) &&
+                    String(aValue).includes('-') || String(aValue).includes('/');
+      
+      if (isDate) {
+        return sortDirection === 'asc' 
+          ? aDate.getTime() - bDate.getTime() 
+          : bDate.getTime() - aDate.getTime();
+      }
+      
+      // 文字列比較
+      const aStr = String(aValue).toLowerCase();
+      const bStr = String(bValue).toLowerCase();
+      
+      const comparison = aStr.localeCompare(bStr, 'ja');
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return {
+      ...data,
+      rows: sortedRows
+    };
+  }, [data, sortColumn, sortDirection]);
 
   if (loading) {
     return (
@@ -124,23 +254,31 @@ export function TableView({ tableName }: TableViewProps) {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-background border-b">
             <tr>
-              {data?.columns.map((column, index) => (
+              {sortedData?.columns.map((column, index) => (
                 <th
                   key={index}
-                  className="text-left p-2 font-medium text-sm border-r last:border-r-0"
+                  className="text-left p-2 font-medium text-sm border-r last:border-r-0 cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => handleSort(column.name)}
                 >
-                  <div>{column.name}</div>
-                  <div className="text-xs text-muted-foreground font-normal">
-                    {column.type}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div>{column.name}</div>
+                      <div className="text-xs text-muted-foreground font-normal">
+                        {column.type}
+                      </div>
+                    </div>
+                    <div className="ml-2">
+                      {getSortIcon(column.name)}
+                    </div>
                   </div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {data?.rows.map((row, rowIndex) => (
+            {sortedData?.rows.map((row, rowIndex) => (
               <tr key={rowIndex} className="border-b hover:bg-accent/50">
-                {data.columns.map((column, colIndex) => (
+                {sortedData.columns.map((column, colIndex) => (
                   <td
                     key={colIndex}
                     className="p-2 text-sm border-r last:border-r-0"
@@ -161,7 +299,7 @@ export function TableView({ tableName }: TableViewProps) {
             ))}
           </tbody>
         </table>
-        {data?.rows.length === 0 && (
+        {sortedData?.rows.length === 0 && (
           <div className="p-4 text-center text-muted-foreground">
             データがありません
           </div>
@@ -171,8 +309,8 @@ export function TableView({ tableName }: TableViewProps) {
       {/* フッター */}
       <div className="border-t p-2 flex items-center justify-between text-sm text-muted-foreground">
         <div>
-          {data?.rowCount || 0} 行を表示
-          {limit < (data?.rowCount || 0) && ` (最初の${limit}行)`}
+          {sortedData?.rowCount || 0} 行を表示
+          {limit < (sortedData?.rowCount || 0) && ` (最初の${limit}行)`}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -187,7 +325,7 @@ export function TableView({ tableName }: TableViewProps) {
             size="sm"
             variant="ghost"
             onClick={() => setOffset(offset + limit)}
-            disabled={!data || data.rows.length < limit}
+            disabled={!sortedData || sortedData.rows.length < limit}
           >
             次へ
           </Button>

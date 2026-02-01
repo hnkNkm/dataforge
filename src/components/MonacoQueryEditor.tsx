@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
 import { invoke } from '@tauri-apps/api/core';
-import { Play, Loader2 } from 'lucide-react';
+import { Play, Loader2, Download, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { toast } from 'sonner';
@@ -20,6 +20,8 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [executionTime, setExecutionTime] = useState<number | null>(null);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const { currentProfile } = useConnectionStore();
   const { resolvedTheme } = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -135,6 +137,128 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
     }
   };
 
+  const handleSort = (columnName: string) => {
+    if (sortColumn === columnName) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(columnName);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (columnName: string) => {
+    if (sortColumn !== columnName) {
+      return <ChevronsUpDown className="w-3 h-3 opacity-50" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ChevronUp className="w-3 h-3" />
+      : <ChevronDown className="w-3 h-3" />;
+  };
+
+  const handleExport = () => {
+    const currentResult = results?.results ? results.results[currentResultIndex] : results;
+    if (!currentResult?.rows || !currentResult?.columns) {
+      toast.error('エクスポートするデータがありません');
+      return;
+    }
+
+    const columns = currentResult.columns;
+    const rows = sortedData?.rows || currentResult.rows;
+
+    // CSV作成（BOM付きUTF-8）
+    const BOM = '\uFEFF';
+    let csvContent = BOM;
+    
+    // ヘッダー行
+    csvContent += columns.map((col: any) => {
+      const value = col.name;
+      if (value.includes(',') || value.includes('\n') || value.includes('"')) {
+        return '"' + value.replace(/"/g, '""') + '"';
+      }
+      return value;
+    }).join(',') + '\n';
+    
+    // データ行
+    rows.forEach((row: any) => {
+      const rowData = columns.map((col: any) => {
+        const value = row[col.name];
+        if (value === null || value === undefined) {
+          return '';
+        }
+        const strValue = String(value);
+        if (strValue.includes(',') || strValue.includes('\n') || strValue.includes('"')) {
+          return '"' + strValue.replace(/"/g, '""') + '"';
+        }
+        return strValue;
+      });
+      csvContent += rowData.join(',') + '\n';
+    });
+    
+    // ダウンロード
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `query_result_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast.success('CSVファイルをダウンロードしました');
+  };
+
+  // ソート済みデータを計算
+  const sortedData = useMemo(() => {
+    const currentResult = results?.results ? results.results[currentResultIndex] : results;
+    if (!currentResult?.rows || !sortColumn) return currentResult;
+
+    const sortedRows = [...currentResult.rows].sort((a, b) => {
+      const aValue = a[sortColumn] ?? '';
+      const bValue = b[sortColumn] ?? '';
+      
+      // NULL値の処理
+      if (aValue === '' && bValue === '') return 0;
+      if (aValue === '') return sortDirection === 'asc' ? 1 : -1;
+      if (bValue === '') return sortDirection === 'asc' ? -1 : 1;
+      
+      // 数値判定と比較
+      const aNum = parseFloat(aValue);
+      const bNum = parseFloat(bValue);
+      const isNumeric = !isNaN(aNum) && !isNaN(bNum) && 
+                       String(aValue).trim() === String(aNum) && 
+                       String(bValue).trim() === String(bNum);
+      
+      if (isNumeric) {
+        return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      
+      // 日付判定と比較
+      const aDate = new Date(aValue);
+      const bDate = new Date(bValue);
+      const isDate = !isNaN(aDate.getTime()) && !isNaN(bDate.getTime()) &&
+                    (String(aValue).includes('-') || String(aValue).includes('/'));
+      
+      if (isDate) {
+        return sortDirection === 'asc' 
+          ? aDate.getTime() - bDate.getTime() 
+          : bDate.getTime() - aDate.getTime();
+      }
+      
+      // 文字列比較
+      const aStr = String(aValue).toLowerCase();
+      const bStr = String(bValue).toLowerCase();
+      
+      const comparison = aStr.localeCompare(bStr, 'ja');
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return {
+      ...currentResult,
+      rows: sortedRows
+    };
+  }, [results, currentResultIndex, sortColumn, sortDirection]);
+
   return (
     <div className="h-full flex flex-col">
       {/* エディタエリア */}
@@ -212,11 +336,23 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
               </div>
             )}
           </div>
-          {executionTime !== null && (
-            <span className="text-xs text-muted-foreground">
-              実行時間: {executionTime}ms
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {executionTime !== null && (
+              <span className="text-xs text-muted-foreground">
+                実行時間: {executionTime}ms
+              </span>
+            )}
+            {results && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleExport}
+                title="CSVエクスポート"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto">
@@ -243,9 +379,10 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
                 );
               }
 
-              // Display query results
-              const displayData = currentResult.rows || results.rows;
-              const displayColumns = currentResult.columns || results.columns;
+              // Display query results (use sorted data if available)
+              const displayResult = sortedData || currentResult;
+              const displayData = displayResult.rows || results.rows;
+              const displayColumns = displayResult.columns || results.columns;
 
               if (!displayData || !displayColumns) {
                 return (
@@ -261,8 +398,17 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
                     <thead className="sticky top-0 bg-background">
                       <tr className="border-b">
                         {displayColumns.map((col: any, index: number) => (
-                          <th key={index} className="text-left p-2 text-sm font-medium border-r last:border-r-0">
-                            {col.name}
+                          <th
+                            key={index}
+                            className="text-left p-2 text-sm font-medium border-r last:border-r-0 cursor-pointer hover:bg-accent/50 transition-colors"
+                            onClick={() => handleSort(col.name)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>{col.name}</span>
+                              <span className="ml-2">
+                                {getSortIcon(col.name)}
+                              </span>
+                            </div>
                           </th>
                         ))}
                       </tr>
