@@ -282,3 +282,178 @@ pub async fn cancel_connection() -> Result<String, String> {
         Err("No active connection to cancel".to_string())
     }
 }
+
+#[tauri::command]
+pub async fn get_table_indexes(table_name: String) -> Result<serde_json::Value, String> {
+    let adapter_state = ADAPTER_STATE.lock().await;
+
+    if let Some(adapter) = adapter_state.as_ref() {
+        crate::log_info!("command", "Fetching indexes for table: {}", table_name);
+        
+        // Get indexes using raw SQL query based on database type
+        let query = match adapter.database_type() {
+            DatabaseType::PostgreSQL => {
+                format!(
+                    "SELECT 
+                        i.indexname AS index_name,
+                        i.indexdef AS definition,
+                        CASE 
+                            WHEN i.indexname LIKE '%_pkey' THEN true 
+                            ELSE false 
+                        END AS is_primary,
+                        CASE 
+                            WHEN i.indexdef LIKE '%UNIQUE%' THEN true 
+                            ELSE false 
+                        END AS is_unique,
+                        pg_size_pretty(pg_relation_size(c.oid)) AS size
+                    FROM pg_indexes i
+                    LEFT JOIN pg_class c ON c.relname = i.indexname
+                    WHERE i.tablename = '{}'
+                    ORDER BY i.indexname",
+                    table_name
+                )
+            },
+            DatabaseType::MySQL => {
+                format!(
+                    "SELECT 
+                        INDEX_NAME AS index_name,
+                        COLUMN_NAME AS column_name,
+                        CASE 
+                            WHEN INDEX_NAME = 'PRIMARY' THEN true 
+                            ELSE false 
+                        END AS is_primary,
+                        CASE 
+                            WHEN NON_UNIQUE = 0 THEN true 
+                            ELSE false 
+                        END AS is_unique,
+                        INDEX_TYPE AS index_type,
+                        CARDINALITY AS cardinality
+                    FROM information_schema.STATISTICS
+                    WHERE TABLE_NAME = '{}'
+                    ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+                    table_name
+                )
+            },
+            DatabaseType::SQLite => {
+                format!(
+                    "SELECT 
+                        name AS index_name,
+                        sql AS definition,
+                        CASE 
+                            WHEN sql LIKE '%PRIMARY KEY%' THEN true 
+                            ELSE false 
+                        END AS is_primary,
+                        CASE 
+                            WHEN sql LIKE '%UNIQUE%' THEN true 
+                            ELSE false 
+                        END AS is_unique
+                    FROM sqlite_master
+                    WHERE type = 'index' 
+                    AND tbl_name = '{}'
+                    ORDER BY name",
+                    table_name
+                )
+            },
+        };
+        
+        let result = adapter.execute_query(&query).await
+            .map_err(|e| format!("Failed to get indexes: {}", e))?;
+        
+        // Convert QueryResult to JSON format compatible with frontend
+        let json_result = serde_json::json!({
+            "columns": result.columns,
+            "rows": result.rows.iter().map(|row| {
+                let mut obj = serde_json::Map::new();
+                for (i, col) in result.columns.iter().enumerate() {
+                    if let Some(value) = row.values.get(i) {
+                        obj.insert(col.name.clone(), 
+                            value.as_ref().map_or(serde_json::Value::Null, |v| serde_json::Value::String(v.clone())));
+                    }
+                }
+                serde_json::Value::Object(obj)
+            }).collect::<Vec<_>>(),
+            "rows_affected": result.rows_affected,
+            "execution_time": result.execution_time
+        });
+        
+        crate::log_info!("command", "Found indexes for table {}", table_name);
+        return Ok(json_result);
+    }
+
+    Err("No active connection".to_string())
+}
+
+#[tauri::command]
+pub async fn generate_select_query(table_name: String) -> Result<String, String> {
+    let adapter_state = ADAPTER_STATE.lock().await;
+
+    if let Some(adapter) = adapter_state.as_ref() {
+        // Get table columns
+        let columns_query = match adapter.database_type() {
+            DatabaseType::PostgreSQL => {
+                format!(
+                    "SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = '{}' 
+                    ORDER BY ordinal_position",
+                    table_name
+                )
+            },
+            DatabaseType::MySQL => {
+                format!(
+                    "SELECT COLUMN_NAME AS column_name 
+                    FROM information_schema.COLUMNS 
+                    WHERE TABLE_NAME = '{}' 
+                    ORDER BY ORDINAL_POSITION",
+                    table_name
+                )
+            },
+            DatabaseType::SQLite => {
+                format!("PRAGMA table_info({})", table_name)
+            },
+        };
+        
+        let result = adapter.execute_query(&columns_query).await
+            .map_err(|e| format!("Failed to get columns: {}", e))?;
+        
+        // Extract column names from QueryResult
+        let columns: Vec<String> = if adapter.database_type() == DatabaseType::SQLite {
+            // SQLite PRAGMA returns different structure
+            result.rows.iter()
+                .filter_map(|row| {
+                    // Find the index of 'name' column
+                    result.columns.iter().position(|col| col.name == "name")
+                        .and_then(|idx| row.values.get(idx))
+                        .and_then(|v| v.as_ref())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        } else {
+            // PostgreSQL and MySQL
+            result.rows.iter()
+                .filter_map(|row| {
+                    // Find the index of 'column_name' column
+                    result.columns.iter().position(|col| col.name == "column_name")
+                        .and_then(|idx| row.values.get(idx))
+                        .and_then(|v| v.as_ref())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        };
+        
+        if columns.is_empty() {
+            return Ok(format!("SELECT * FROM {} LIMIT 100;", table_name));
+        }
+        
+        // Generate formatted SELECT query
+        let select_query = format!(
+            "SELECT\n    {}\nFROM {}\nLIMIT 100;",
+            columns.join(",\n    "),
+            table_name
+        );
+        
+        return Ok(select_query);
+    }
+
+    Err("No active connection".to_string())
+}
