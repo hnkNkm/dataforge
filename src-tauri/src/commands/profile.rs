@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use tauri::State;
+use tauri::{State, AppHandle};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::profile::{ConnectionProfile, ProfileManager};
@@ -50,11 +50,12 @@ impl ProfileManagerState {
 pub async fn create_profile(
     request: CreateProfileRequest,
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<ConnectionProfile, String> {
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;
@@ -94,11 +95,12 @@ pub async fn create_profile(
 #[tauri::command]
 pub async fn list_profiles(
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<Vec<ConnectionProfile>, String> {
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;
@@ -113,11 +115,12 @@ pub async fn list_profiles(
 pub async fn get_profile(
     id: String,
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<ConnectionProfile, String> {
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;
@@ -132,11 +135,12 @@ pub async fn get_profile(
 pub async fn update_profile(
     request: UpdateProfileRequest,
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<ConnectionProfile, String> {
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;
@@ -167,11 +171,12 @@ pub async fn update_profile(
 pub async fn delete_profile(
     id: String,
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<(), String> {
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;
@@ -186,6 +191,7 @@ pub async fn delete_profile(
 pub async fn connect_with_profile(
     profile_id: String,
     state: State<'_, ProfileManagerState>,
+    app_handle: AppHandle,
 ) -> Result<String, String> {
     use crate::database::adapter::create_adapter;
     use crate::commands::{ADAPTER_STATE, CONNECTION_CANCEL_TOKEN};
@@ -194,7 +200,7 @@ pub async fn connect_with_profile(
     let mut manager_guard = state.0.lock().await;
 
     if manager_guard.is_none() {
-        *manager_guard = Some(ProfileManager::new().map_err(|e| e.to_string())?);
+        *manager_guard = Some(ProfileManager::new(&app_handle).map_err(|e| e.to_string())?);
     }
 
     let manager = manager_guard.as_ref().ok_or("Profile manager not initialized")?;

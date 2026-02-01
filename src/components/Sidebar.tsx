@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -55,12 +55,17 @@ interface ProjectGroup {
 }
 
 export function Sidebar({ isOpen, onToggle, onNewConnection, onEditConnection }: SidebarProps) {
-  const { profiles, deleteProfile } = useProfileStore();
+  const { profiles, deleteProfile, loadProfiles } = useProfileStore();
   const { connectWithProfile, currentProfile, disconnect, isConnecting } = useConnectionStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(['default']));
   const [expandedConnections, setExpandedConnections] = useState<Set<string>>(new Set());
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [deletingProfile, setDeletingProfile] = useState<ConnectionProfile | null>(null);
+
+  // 初期ロード時にプロファイルを読み込む
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
 
   // プロジェクトごとにグループ化
   const groupedProfiles = profiles.reduce<Record<string, ConnectionProfile[]>>((groups, profile) => {

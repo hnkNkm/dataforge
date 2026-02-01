@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::fs;
 use keyring::Entry;
 use serde_json;
+use tauri::{AppHandle, Manager};
 use crate::error::AppError;
 use super::{ConnectionProfile, crypto};
 
@@ -14,29 +15,24 @@ pub struct ProfileStorage {
 }
 
 impl ProfileStorage {
-    /// Create a new profile storage instance
-    pub fn new() -> Result<Self, AppError> {
-        let profiles_path = Self::get_profiles_path()?;
+    /// Create a new profile storage instance using Tauri's app data directory
+    pub fn new(app_handle: &AppHandle) -> Result<Self, AppError> {
+        // Use Tauri's app_data_dir for proper cross-platform support
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| AppError::Storage(format!("Could not resolve app data directory: {}", e)))?;
+
+        let profiles_dir = app_data_dir.join("profiles");
 
         // Ensure the directory exists
-        if let Some(parent) = profiles_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                AppError::Storage(format!("Failed to create profiles directory: {}", e))
-            })?;
-        }
+        fs::create_dir_all(&profiles_dir).map_err(|e| {
+            AppError::Storage(format!("Failed to create profiles directory: {}", e))
+        })?;
+
+        let profiles_path = profiles_dir.join(PROFILE_FILE);
 
         Ok(Self { profiles_path })
-    }
-
-    /// Get the path to the profiles file
-    fn get_profiles_path() -> Result<PathBuf, AppError> {
-        let home_dir = dirs::home_dir()
-            .ok_or_else(|| AppError::Storage("Could not find home directory".to_string()))?;
-
-        Ok(home_dir
-            .join(".dataforge")
-            .join("profiles")
-            .join(PROFILE_FILE))
     }
 
     /// Save a profile to storage
