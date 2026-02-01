@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
 import { editor } from 'monaco-editor';
 import { invoke } from '@tauri-apps/api/core';
@@ -25,9 +25,24 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
   const { currentProfile } = useConnectionStore();
   const { resolvedTheme } = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const executeRef = useRef<() => void>();
 
   const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editor;
+
+    // Add keyboard shortcut for execution directly in Monaco
+    editor.addAction({
+      id: 'execute-query',
+      label: 'Execute Query',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+      ],
+      run: () => {
+        if (executeRef.current) {
+          executeRef.current();
+        }
+      }
+    });
 
     // Register SQL completion provider
     monaco.languages.registerCompletionItemProvider('sql', {
@@ -61,11 +76,6 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
       },
     });
 
-    // Add keyboard shortcut for execution
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      handleExecute();
-    });
-
     // Configure editor options
     editor.updateOptions({
       minimap: { enabled: false },
@@ -84,14 +94,21 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
     });
   };
 
-  const handleExecute = async () => {
+  const handleExecute = useCallback(async () => {
     if (!currentProfile) {
       toast.error('データベースに接続してください');
       return;
     }
 
-    const currentQuery = editorRef.current?.getValue() || query;
-    if (!currentQuery.trim()) {
+    // Always get the latest value from the editor
+    let currentQuery = editorRef.current?.getValue();
+    
+    // Fallback to query state if editorRef is not available
+    if (!currentQuery) {
+      currentQuery = query;
+    }
+    
+    if (!currentQuery || !currentQuery.trim()) {
       toast.error('クエリを入力してください');
       return;
     }
@@ -126,7 +143,12 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentProfile, query]);
+
+  // Store the latest handleExecute in ref
+  useEffect(() => {
+    executeRef.current = handleExecute;
+  }, [handleExecute]);
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
@@ -258,6 +280,7 @@ export function MonacoQueryEditor({ initialContent = 'SELECT * FROM ', onContent
       rows: sortedRows
     };
   }, [results, currentResultIndex, sortColumn, sortDirection]);
+
 
   return (
     <div className="h-full flex flex-col">
